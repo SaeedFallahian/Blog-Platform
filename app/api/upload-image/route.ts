@@ -1,3 +1,4 @@
+// فایل: app/api/upload-image/route.ts
 import { NextResponse } from 'next/server'
 import { v2 as cloudinary } from 'cloudinary'
 
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
 
     const uploadResult = await new Promise<{ url: string }>((resolve, reject) => {
       cloudinary.uploader
-        .upload_stream({ folder: 'blog_posts' }, (error, result) => {
+        .upload_stream({ folder: 'blog-posts' }, (error, result) => {
+          // تغییر: استفاده از "blog-posts"
           if (error || !result) {
             console.log('❌ خطا در cloudinary:', error)
             return reject(error)

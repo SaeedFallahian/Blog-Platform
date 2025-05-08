@@ -11,10 +11,10 @@ export default function AuthButtons() {
     <div className="auth-buttons">
       <SignedIn>
         <div className="auth-buttons">
-          <UserButton afterSignOutUrl="/" />
           <Link href="/create-post">
             <button className="clerk-button create-post">Create New Post</button>
           </Link>
+          <UserButton afterSignOutUrl="/" />
           {isAdmin && (
             <Link href="/admin">
               <button className="clerk-button admin-panel">Admin Panel</button>

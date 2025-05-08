@@ -1,80 +1,109 @@
-'use client';
+"use client";
 
-import { useState, ChangeEvent, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function CreatePost() {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    if (name === 'title') setTitle(value);
-    if (name === 'content') setContent(value);
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImage(file);
+      setUploading(true);
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      try {
+        const res = await fetch("/api/upload-image", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setImageUrl(data.url);
+          setError(null);
+        } else {
+          setError("خطا در آپلود تصویر");
+        }
+      } catch (error) {
+        setError("خطا در آپلود تصویر");
+      } finally {
+        setUploading(false);
+      }
+    }
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     try {
-      const response = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content }),
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, imageUrl }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create post');
+      if (res.ok) {
+        router.push("/");
+      } else {
+        const errorData = await res.json();
+        setError(errorData.error || "خطا در ایجاد پست");
       }
-
-      router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to create post');
+    } catch (error) {
+      setError("خطا در ایجاد پست");
     }
   };
 
   return (
-    <div className="container">
-      <h2 style={{ fontSize: '1.75rem', fontWeight: 600, marginBottom: '16px' }}>
-        Create a New Post
-      </h2>
+    <div className="create-post">
+      <h3> Create New Post </h3>
+      {error && <p className="error">{error}</p>}
       <form onSubmit={handleSubmit}>
-        <div>
-          <label
-            htmlFor="title"
-            style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px' }}
-          >
-            Title
-          </label>
+        <div className="form-group">
+          <label htmlFor="title">Title</label>
           <input
-            id="title"
-            name="title"
             type="text"
+            id="title"
             value={title}
-            onChange={handleChange}
+            onChange={(e) => setTitle(e.target.value)}
             required
           />
         </div>
-        <div>
-          <label
-            htmlFor="content"
-            style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px' }}
-          >
-            Content
-          </label>
+        <div className="form-group">
+          <label htmlFor="نظر">Content</label>
           <textarea
             id="content"
-            name="content"
             value={content}
-            onChange={handleChange}
-            rows={5}
+            onChange={(e) => setContent(e.target.value)}
             required
           />
         </div>
-        {error && <p className="error">{error}</p>}
-        <button type="submit">Create Post</button>
+        <div className="form-group">
+          <label htmlFor="image">Picture</label>
+          <input
+            type="file"
+            id="image"
+            accept="image/*"
+            onChange={handleImageChange}
+            disabled={uploading}
+          />
+          {uploading && <p className="uploading-text"> Uploading...</p>}
+          {imageUrl && (
+            <img src={imageUrl} alt="Prev" className="image-preview" />
+          )}
+        </div>
+        <button type="submit" className="submit-button" disabled={uploading}>
+         Create Post
+        </button>
       </form>
     </div>
   );

@@ -1,57 +1,70 @@
-import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
-import db, { connectDB } from '@/lib/surrealdb';
+import { NextResponse } from 'next/server'
+import { currentUser, clerkClient } from '@clerk/nextjs/server'
+import db, { connectDB } from '@/lib/surrealdb'
 
 type Post = {
-  id: string;
-  title: string;
-  content: string;
-  author: string;
-  created_at: string;
-};
+  id: string
+  title: string
+  content: string
+  author: string
+  created_at: string
+  authorName: string
+}
 
 export async function GET(req: Request) {
   try {
-    const user = await currentUser();
+    const user = await currentUser()
     if (!user) {
-      return NextResponse.json({ error: 'کاربر احراز هویت نشده' }, { status: 401 });
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 })
     }
 
-    await connectDB();
-
-    const { searchParams } = new URL(req.url);
-    const query = searchParams.get('q') || '';
+    const { searchParams } = new URL(req.url)
+    const query = searchParams.get('q')?.trim()
 
     if (!query) {
-      console.log('No search query provided, returning empty array');
-      return NextResponse.json([]);
+      return NextResponse.json({ error: 'Search query is required' }, { status: 400 })
     }
 
-    console.log(`Search query: ${query}`);
+    await connectDB()
 
-    const result = await db.query<Post[]>(
-      `SELECT * FROM posts
-       WHERE author = $author
-       AND (string::lowercase(title) CONTAINS string::lowercase($query)
-            OR string::lowercase(content) CONTAINS string::lowercase($query))`,
-      { author: user.id, query }
-    );
+    const sql = `
+             SELECT * FROM posts
+             WHERE title ~ $query OR content ~ $query
+             ORDER BY created_at DESC
+           `
+    const params = { query }
 
-    let posts: Post[] = [];
+    const result = await db.query<Post[]>(sql, params)
+    let posts: Post[] = []
     if (Array.isArray(result)) {
-      posts = Array.isArray(result[0]) ? result[0] : result;
+      posts = Array.isArray(result[0]) ? result[0] : result
     } else if (Array.isArray((result[0] as any)?.result)) {
-      posts = (result[0] as { result: Post[] }).result;
+      posts = (result[0] as { result: Post[] }).result
     }
 
-    console.log(`Found ${posts.length} posts for query: ${query}`);
+    const enrichedPosts = await Promise.all(
+      posts.map(async (post) => {
+        try {
+          console.log(`Fetching user for author ID: ${post.author}`)
+          const clerk = await clerkClient()
+          const clerkUser = await clerk.users.getUser(post.author)
+          const authorName = clerkUser.emailAddresses[0]?.emailAddress || 'Unknown email'
+          console.log(`Clerk user email: ${authorName}`)
+          return { ...post, authorName }
+        } catch (error: any) {
+          console.error(`Error fetching user ${post.author}:`, error.message)
+          return { ...post, authorName: 'Unknown email' }
+        }
+      })
+    )
 
-    return NextResponse.json(posts, { status: 200 });
+    console.log(`Found ${enrichedPosts.length} posts for query: ${query}`)
+    return NextResponse.json(enrichedPosts, { status: 200 })
   } catch (error: any) {
-    console.error('🔥 خطای جستجو در SurrealDB:', error.message);
+    console.error('SEARCH ERROR =>', error.message)
     return NextResponse.json(
-      { error: 'خطا در جستجوی پست‌ها', details: error.message },
+      { error: 'Failed to search posts', details: error.message },
       { status: 500 }
-    );
+    )
   }
 }

@@ -9,58 +9,43 @@ type Post = {
   content: string;
   author: string;
   created_at: string;
+  imageUrl?: string;
+  updated_at: string;
 };
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const user = await currentUser();
     if (!user) {
-      return NextResponse.json({ error: 'کاربر احراز هویت نشده' }, { status: 401 });
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
     }
 
     await connectDB();
-    const { id } = await params; // params نیازی به await نداره
+    const { id } = await params;
     const postId = new RecordId('posts', id);
-
     console.log('UPDATE ID =>', id);
     console.log('RECORD ID =>', postId.toString());
-
-    // دریافت داده‌های ورودی
-    const { title, content } = await req.json();
-    if (!title || !content) {
-      console.log('Missing title or content');
-      return NextResponse.json({ error: 'عنوان و متن الزامی هستند' }, { status: 400 });
-    }
-
-    // چک کردن وجود پست
-    console.log(`Before selecting post: ${postId}`);
+    const { title, content, imageUrl } = await req.json();
     const post = await db.select<Post>(postId);
     if (!post) {
-      console.log(`Post not found: ${postId}`);
-      return NextResponse.json({ error: 'پست پیدا نشد' }, { status: 404 });
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // آپدیت پست
-    console.log(`Before updating post: ${postId}`);
-    const updatedPost = await db.merge(postId, {
+    if (post.author !== user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    const updatedPost = await db.merge<Post>(postId, {
       title,
       content,
+      imageUrl: imageUrl !== undefined ? imageUrl : post.imageUrl, // بررسی مقدار undefined برای تصویر
       updated_at: new Date().toISOString(),
     });
-    console.log('UPDATE RESULT =>', JSON.stringify(updatedPost));
-
-    if (!updatedPost) {
-      console.log(`Failed to update post: ${postId}`);
-      return NextResponse.json({ error: 'به‌روزرسانی پست ناموفق بود' }, { status: 500 });
+    if (!title || !content) {
+      return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
     }
-
-    console.log(`Post updated: ${postId}`);
     return NextResponse.json(updatedPost, { status: 200 });
   } catch (error: any) {
-    console.error('UPDATE ERROR =>', error.message);
-    return NextResponse.json(
-      { error: 'خطا در به‌روزرسانی پست', details: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update post', details: error.message }, { status: 500 });
   }
 }

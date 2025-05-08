@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { useSearchParams } from 'next/navigation';
 import PostList from '@/components/PostList';
 import SearchBox from '@/components/SearchBox';
-import PostFilter from './components/PostFilter';
+import PostFilter from '../components/PostFilter';
 
 type Post = {
   id: string;
@@ -26,24 +25,25 @@ type LikeStatus = {
 
 type FilterType = 'oldest' | 'newest' | 'mostLiked';
 
-export default function Home() {
-  const searchParams = useSearchParams();
-  const searchQuery = searchParams.get('q') || '';
+export default function FavoritesPage({ searchParams }: { searchParams: { q?: string } }) {
+  const searchQuery = searchParams.q || '';
   const { user, isSignedIn } = useUser();
   const [posts, setPosts] = useState<Post[]>([]);
   const [filteredPosts, setFilteredPosts] = useState<Post[]>([]);
   const [likeStatuses, setLikeStatuses] = useState<{ [key: string]: LikeStatus }>({});
   const [error, setError] = useState<string | null>(null);
-  const [currentFilter, setCurrentFilter] = useState<FilterType>('newest'); // اضافه شده
 
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      setError('Please sign in to view your favorites');
+      return;
+    }
 
     async function fetchPosts() {
       try {
         const url = searchQuery
-          ? `/api/posts/search?q=${encodeURIComponent(searchQuery)}`
-          : '/api/user-posts';
+          ? `/api/favorites/user?q=${encodeURIComponent(searchQuery)}`
+          : '/api/favorites/user';
         console.log('Fetching posts from URL:', url);
         const response = await fetch(url);
         if (!response.ok) {
@@ -78,12 +78,11 @@ export default function Home() {
     fetchPosts();
   }, [searchQuery, isSignedIn]);
 
-  // آپدیت filteredPosts وقتی likeStatuses یا currentFilter تغییر می‌کنه
-  useEffect(() => {
+  const handleFilterChange = (filter: FilterType) => {
+    console.log('Filter selected:', filter);
     let sortedPosts = [...posts];
-    console.log('Re-sorting posts with filter:', currentFilter);
     console.log('Posts before sorting:', sortedPosts);
-    switch (currentFilter) {
+    switch (filter) {
       case 'oldest':
         sortedPosts.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         break;
@@ -96,55 +95,31 @@ export default function Home() {
     }
     console.log('Posts after sorting:', sortedPosts);
     setFilteredPosts(sortedPosts);
-  }, [likeStatuses, currentFilter, posts]);
-
-  const handleFilterChange = (filter: FilterType) => {
-    console.log('Filter selected:', filter);
-    setCurrentFilter(filter);
-  };
-
-  // هندل کردن تغییر لایک از PostList
-  const handleLikeChange = (postId: string, newLikeStatus: LikeStatus) => {
-    console.log('Like changed for post:', postId, newLikeStatus);
-    setLikeStatuses((prev) => ({
-      ...prev,
-      [postId]: newLikeStatus,
-    }));
   };
 
   return (
     <div className="container">
       <h2 style={{ fontSize: '1.75rem', fontWeight: 600, marginBottom: '16px' }}>
-        Well Come to Blgo Platform
+        Your Favorite Posts
       </h2>
       <p style={{ marginBottom: '16px', color: '#4b5563' }}>
-        Search Posts
+        View all posts you’ve added to your favorites.
       </p>
-      <SearchBox defaultValue={searchQuery} formAction="/" />
-      <div className="container">
-        {user ? (
-          <>
-            <PostFilter onFilterChange={handleFilterChange} />
-            <PostList
-              posts={filteredPosts}
-              searchQuery={searchQuery}
-              isAllPosts={false}
-              onLikeChange={handleLikeChange} // اضافه شده
-            />
-          </>
-        ) : (
-          <div>
-            <h1 className="profile-title">Well Come</h1>
-            <p style={{ fontSize: '18px', marginBottom: '16px' }}>
-              Log in To See Your Posts{' '}
-              <a href="/all-posts" className="author-link">
-                All Posts
-              </a>{' '}
-              Go.
-            </p>
-          </div>
-        )}
-      </div>
+      <SearchBox defaultValue={searchQuery} formAction="/favorites" />
+      {error ? (
+        <p className="error" style={{ marginBottom: '16px' }}>
+          {error}
+        </p>
+      ) : (
+        <>
+          <PostFilter onFilterChange={handleFilterChange} />
+          <PostList
+            posts={filteredPosts}
+            searchQuery={searchQuery}
+            isFavorites={true}
+          />
+        </>
+      )}
     </div>
   );
 }
